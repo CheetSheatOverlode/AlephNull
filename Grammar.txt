@@ -1,4 +1,7 @@
 expr   : term ((PLUS|MINUS) term)*
 
-term   : factor ((MUL|DIV) factor)*
-factor : INT|FLOAT
+term   : expo ((MUL|DIV|MOD) expo)*
+
+expo : num (EXP num)*
+
+num    : INT|FLOAT
