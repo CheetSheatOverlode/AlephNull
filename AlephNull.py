@@ -22,7 +22,7 @@ class Error:
         self.details = details
 
     def as_string(self):
-        result = f'{self.error_name}:{self.details}'
+        result = f'{self.error_name}:{self.details}\n'
         result += f'File {self.pos_start.fn}, line {self.pos_start.ln + 1}'
         result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
         return result
@@ -32,7 +32,7 @@ class IllegalCharError(Error):
         super().__init__(pos_start, pos_end, 'Illegal Character', details)
 
 class InvalidSyntaxError(Error):
-    def __init__(self, pos_start, pos_end, details):
+    def __init__(self, pos_start, pos_end, details=''):
         super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
 
 ###################
@@ -79,8 +79,8 @@ TT_RPAREN  = 'RPAREN'
 TT_EOF     = 'EOF'
 
 class Token:
-    def __init__(self, type_, value=None, pos_start=None, pos_end=None):
-        self.type = type_
+    def __init__(self, type, value=None, pos_start=None, pos_end=None):
+        self.type = type
         self.value = value
 
         if pos_start:
@@ -191,8 +191,15 @@ class BinOpNode:
         self.op_tok = op_tok
 
     def  __repr__(self):
-        return f'({self.op_tok}, {self.node})'
+        return f'({self.left_node}, {self.op_tok}, {self.right_node})'
 
+class UnaryOpNode:
+    def __init__(self, op_tok, node):
+        self.op_tok = op_tok
+        self.node = node
+
+    def __repr__(self):
+        return f'({self.op_tok}, {self.node})'
 
 ###################
 #Parser Result
@@ -207,7 +214,7 @@ class ParseResult:
         if isinstance(res, ParseResult):
             if res.error:
                 self.error = res.error
-                return res.node
+            return res.node
         return res
 
     def success(self, node):
@@ -227,7 +234,7 @@ class ParseResult:
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
-        self.tok_idx = 1
+        self.tok_idx = -1
         self.advance()
 
     def advance(self):
@@ -250,14 +257,31 @@ class Parser:
     def num(self):
         res = ParseResult()
         tok = self.current_tok
-        if tok.type in(TT_INT, TT_FLOAT):
+
+        if tok.type in (TT_PLUS, TT_MINUS):
+            res.register(self.advance())
+            num = res.register(self.num())
+            if res.error:
+                return res
+            return res.success(UnaryOpNode(tok, num))
+
+        elif tok.type in (TT_INT, TT_FLOAT):
             res.register(self.advance())
             return res.success(NumberNode(tok))
 
-        return res.failure(InvalidSyntaxError(
-            tok.pos_start, tok.pos_end,
-            "Expected Type <INT> or Type <FLOAT>."
-        ))
+        elif tok.type == TT_LPAREN:
+            res.register(self.advance())
+            expr = res.register(self.expr())
+            if res.error:
+                return res
+            if self.current_tok.type == TT_RPAREN:
+                res.register(self.advance())
+                return res.success(expr)
+            else:
+                return res.failure(InvalidSyntaxError(
+			    self.current_tok.pos_start, self.current_tok.pos_end,
+			    "Expected ')'"
+			))
 
     def expo(self):
         return self.bin_op(self.num, (TT_EXP))
